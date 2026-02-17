@@ -1,0 +1,46 @@
+{
+  "github": {
+    "token": "ghp_***",
+    "baseUrl": "https://api.github.com"
+  },
+  "team": {
+    "teamId": "platform-core",
+    "thresholds": {
+      "autoApprove": 20,
+      "autoApproveWithComment": 40,
+      "requiresReview": 60,
+      "requiresSeniorReview": 80
+    },
+    "criticalPaths": {
+      "auth/**/*": { "baseScore": 60, "multiplier": 2.0 },
+      "infra/**/*": { "baseScore": 50, "multiplier": 2.0 },
+      "migrations/**/*": { "baseScore": 70, "multiplier": 2.5 }
+    },
+    "safePaths": {
+      "docs/**/*": { "multiplier": 0.1 },
+      "tests/**/*": { "multiplier": 0.3 }
+    },
+    "blockedPaths": ["src/auth/*", "infra/*"]
+  },
+  "security": {
+    "enabled": true,
+    "scanSecrets": true,
+    "scanDependencies": true,
+    "scanInjections": true,
+    "dependencySeverityThreshold": "moderate"
+  },
+  "policies": {
+    "enabled": true,
+    "frameworks": ["SOC2"],
+    "requireJiraTicket": false,
+    "requireChangelog": false
+  },
+  "decision": {
+    "minConfidence": 0.7,
+    "fallbackToReview": true
+  },
+  "audit": {
+    "logPath": "./audit",
+    "retentionDays": 90
+  }
+}

@@ -1,0 +1,168 @@
+#!/usr/bin/env node
+
+import { PRGatekeeper } from './gatekeeper/index.js';
+import { loadConfig } from './config/index.js';
+import { parseArgs } from './cli/index.js';
+
+async function main() {
+  try {
+    // Parse CLI arguments
+    const args = parseArgs();
+
+    // Load configuration
+    const config = await loadConfig(args.config);
+
+    // Create gatekeeper instance
+    const gatekeeper = new PRGatekeeper(config);
+
+    console.log('\n🔍 PR Gatekeeper v0.1.0');
+    console.log(`📋 Analyzing PR #${args.pr} in ${args.owner}/${args.repo}\n`);
+
+    // Analyze PR
+    const result = await gatekeeper.analyze({
+      owner: args.owner,
+      repo: args.repo,
+      prNumber: parseInt(args.pr)
+    });
+
+    // Display results
+    displayResults(result);
+
+    // Exit with appropriate code
+    process.exit(result.decision.action === 'block' ? 1 : 0);
+  } catch (error) {
+    console.error('\n❌ Error:', error.message);
+    if (error.stack && args.verbose) {
+      console.error(error.stack);
+    }
+    process.exit(1);
+  }
+}
+
+function displayResults(result) {
+  const { pr, blastRadius, securityFindings, policyResults, decision } = result;
+
+  // PR Info
+  console.log('┌─────────────────────────────────────────────────────────────┐');
+  console.log('│  PULL REQUEST                                               │');
+  console.log('├─────────────────────────────────────────────────────────────┤');
+  console.log(`│  Title:     ${pr.title.substring(0, 56).padEnd(56)}│`);
+  console.log(`│  Author:    ${pr.author.padEnd(56)}│`);
+  console.log(`│  Branch:    ${pr.sourceBranch} → ${pr.targetBranch.padEnd(38)}│`);
+  console.log(`│  Files:     ${pr.changedFiles} (+${pr.additions}/-${pr.deletions})`.padEnd(60) + '│');
+  console.log('└─────────────────────────────────────────────────────────────┘');
+  console.log();
+
+  // Blast Radius
+  console.log('┌─────────────────────────────────────────────────────────────┐');
+  console.log('│  BLAST RADIUS                                               │');
+  console.log('├─────────────────────────────────────────────────────────────┤');
+  console.log(`│  Score:     ${blastRadius.score}/100`.padEnd(60) + '│');
+  console.log(`│  Code:      ${blastRadius.codeImpact}`.padEnd(60) + '│');
+  console.log(`│  Test:      ${blastRadius.testImpact}`.padEnd(60) + '│');
+  console.log(`│  Deps:      ${blastRadius.dependencyImpact}`.padEnd(60) + '│');
+  if (blastRadius.riskSignals.length > 0) {
+    console.log(`│  Signals:   ${blastRadius.riskSignals.map(s => s.type).join(', ')}`.padEnd(60) + '│');
+  }
+  console.log('└─────────────────────────────────────────────────────────────┘');
+  console.log();
+
+  // Security Findings
+  if (securityFindings.length > 0) {
+    console.log('┌─────────────────────────────────────────────────────────────┐');
+    console.log('│  SECURITY FINDINGS                                           │');
+    console.log('├─────────────────────────────────────────────────────────────┤');
+
+    const critical = securityFindings.filter(f => f.severity === 'critical');
+    const high = securityFindings.filter(f => f.severity === 'high');
+    const medium = securityFindings.filter(f => f.severity === 'medium');
+    const low = securityFindings.filter(f => f.severity === 'low');
+
+    if (critical.length > 0) {
+      console.log(`│  🔴 CRITICAL (${critical.length})                                        │`);
+      critical.forEach(f => {
+        console.log(`│    ${f.type} in ${f.location}`.substring(0, 55).padEnd(56) + '│');
+      });
+    }
+    if (high.length > 0) {
+      console.log(`│  🟠 HIGH (${high.length})                                               │`);
+      high.forEach(f => {
+        console.log(`│    ${f.type} in ${f.location}`.substring(0, 55).padEnd(56) + '│');
+      });
+    }
+    if (medium.length > 0) {
+      console.log(`│  🟡 MEDIUM (${medium.length})                                             │`);
+    }
+    if (low.length > 0) {
+      console.log(`│  🔵 LOW (${low.length})                                                │`);
+    }
+
+    console.log('└─────────────────────────────────────────────────────────────┘');
+    console.log();
+  } else {
+    console.log('✅ No security findings detected\n');
+  }
+
+  // Policy Results
+  if (policyResults.length > 0) {
+    console.log('┌─────────────────────────────────────────────────────────────┐');
+    console.log('│  POLICY RESULTS                                              │');
+    console.log('├─────────────────────────────────────────────────────────────┤');
+
+    const passed = policyResults.filter(r => r.status === 'passed');
+    const failed = policyResults.filter(r => r.status === 'failed');
+    const warning = policyResults.filter(r => r.status === 'warning');
+
+    console.log(`│  Passed: ${passed.length}  |  Failed: ${failed.length}  |  Warnings: ${warning.length}`.padEnd(60) + '│');
+
+    if (failed.length > 0) {
+      failed.forEach(r => {
+        const icon = r.action === 'block' ? '🚫' : '⚠️';
+        console.log(`│  ${icon} ${r.policyId}: ${r.status} (${r.action || 'no action'})`.padEnd(57) + '│');
+      });
+    }
+
+    console.log('└─────────────────────────────────────────────────────────────┘');
+    console.log();
+  } else {
+    console.log('✅ All policies passed\n');
+  }
+
+  // Final Decision
+  const actionEmoji = {
+    'auto_approve': '✅',
+    'auto_approve_comment': '✅💬',
+    'require_review': '👀',
+    'require_senior_review': '👀👤',
+    'block': '🚫'
+  };
+
+  const actionText = {
+    'auto_approve': 'AUTO-APPROVED',
+    'auto_approve_comment': 'AUTO-APPROVED (with comment)',
+    'require_review': 'REQUIRES REVIEW',
+    'require_senior_review': 'REQUIRES SENIOR REVIEW',
+    'block': 'BLOCKED'
+  };
+
+  console.log('┌─────────────────────────────────────────────────────────────┐');
+  console.log('│  FINAL DECISION                                               │');
+  console.log('├─────────────────────────────────────────────────────────────┤');
+  console.log(`│  ${actionEmoji[decision.action]} ${actionText[decision.action]}`.padEnd(60) + '│');
+  console.log(`│  Confidence: ${(decision.confidence * 100).toFixed(1)}%`.padEnd(60) + '│');
+  console.log('│                                                               │');
+  console.log(`│  ${decision.reasoning.substring(0, 56)}`.padEnd(60) + '│');
+  console.log('└─────────────────────────────────────────────────────────────┘');
+  console.log();
+
+  // Recommendations
+  if (decision.recommendations && decision.recommendations.length > 0) {
+    console.log('💡 Recommendations:');
+    decision.recommendations.forEach(rec => {
+      console.log(`   • ${rec}`);
+    });
+    console.log();
+  }
+}
+
+main();
