@@ -4,11 +4,17 @@ import { SecurityScanner } from '../security/index.js';
 import { PolicyEvaluator } from '../policy/index.js';
 import { DecisionEngine } from '../decision/index.js';
 import { AuditLogger } from '../audit/index.js';
+import type { Config, AnalysisResult } from '../types.js';
 
 export class PRGatekeeper {
-  constructor(config) {
-    this.config = config;
+  private github: GitHubClient;
+  private blastRadius: BlastRadiusCalculator;
+  private security: SecurityScanner;
+  private policy: PolicyEvaluator;
+  private decision: DecisionEngine;
+  private audit: AuditLogger;
 
+  constructor(config: Config) {
     this.github = new GitHubClient(config.github);
     this.blastRadius = new BlastRadiusCalculator(config.team);
     this.security = new SecurityScanner(config.security);
@@ -17,7 +23,7 @@ export class PRGatekeeper {
     this.audit = new AuditLogger(config.audit);
   }
 
-  async analyze({ owner, repo, prNumber }) {
+  async analyze({ owner, repo, prNumber }: { owner: string; repo: string; prNumber: number }): Promise<AnalysisResult> {
     // 1. Fetch PR from GitHub
     console.log('📥 Fetching PR data...');
     const pr = await this.github.getPR(owner, repo, prNumber);
@@ -40,7 +46,6 @@ export class PRGatekeeper {
     // 5. Make decision
     console.log('🤖 Making decision...');
     const decision = await this.decision.make({
-      pr,
       blastRadius,
       securityFindings,
       policyResults

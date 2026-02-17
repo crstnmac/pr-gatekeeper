@@ -3,8 +3,9 @@
 import { PRGatekeeper } from './gatekeeper/index.js';
 import { loadConfig } from './config/index.js';
 import { parseArgs } from './cli/index.js';
+import type { AnalysisResult } from './types.js';
 
-async function main() {
+async function main(): Promise<void> {
   try {
     // Parse CLI arguments
     const args = parseArgs();
@@ -22,7 +23,7 @@ async function main() {
     const result = await gatekeeper.analyze({
       owner: args.owner,
       repo: args.repo,
-      prNumber: parseInt(args.pr)
+      prNumber: parseInt(args.pr, 10)
     });
 
     // Display results
@@ -31,15 +32,15 @@ async function main() {
     // Exit with appropriate code
     process.exit(result.decision.action === 'block' ? 1 : 0);
   } catch (error) {
-    console.error('\n❌ Error:', error.message);
-    if (error.stack && args.verbose) {
+    console.error('\n❌ Error:', error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack && args.verbose) {
       console.error(error.stack);
     }
     process.exit(1);
   }
 }
 
-function displayResults(result) {
+function displayResults(result: AnalysisResult): void {
   const { pr, blastRadius, securityFindings, policyResults, decision } = result;
 
   // PR Info
@@ -109,11 +110,11 @@ function displayResults(result) {
     console.log('│  POLICY RESULTS                                              │');
     console.log('├─────────────────────────────────────────────────────────────┤');
 
-    const passed = policyResults.filter(r => r.status === 'passed');
-    const failed = policyResults.filter(r => r.status === 'failed');
-    const warning = policyResults.filter(r => r.status === 'warning');
+    const passed = policyResults.filter(r => r.status === 'passed').length;
+    const failed = policyResults.filter(r => r.status === 'failed').length;
+    const warning = policyResults.filter(r => r.status === 'warning').length;
 
-    console.log(`│  Passed: ${passed.length}  |  Failed: ${failed.length}  |  Warnings: ${warning.length}`.padEnd(60) + '│');
+    console.log(`│  Passed: ${passed}  |  Failed: ${failed}  |  Warnings: ${warning}`.padEnd(60) + '│');
 
     if (failed.length > 0) {
       failed.forEach(r => {
@@ -129,29 +130,31 @@ function displayResults(result) {
   }
 
   // Final Decision
-  const actionEmoji = {
-    'auto_approve': '✅',
-    'auto_approve_comment': '✅💬',
-    'require_review': '👀',
-    'require_senior_review': '👀👤',
-    'block': '🚫'
+  const actionEmoji: Record<string, string> = {
+    auto_approve: '✅',
+    auto_approve_comment: '✅💬',
+    require_review: '👀',
+    require_senior_review: '👀👤',
+    block: '🚫'
   };
 
-  const actionText = {
-    'auto_approve': 'AUTO-APPROVED',
-    'auto_approve_comment': 'AUTO-APPROVED (with comment)',
-    'require_review': 'REQUIRES REVIEW',
-    'require_senior_review': 'REQUIRES SENIOR REVIEW',
-    'block': 'BLOCKED'
+  const actionText: Record<string, string> = {
+    auto_approve: 'AUTO-APPROVED',
+    auto_approve_comment: 'AUTO-APPROVED (with comment)',
+    require_review: 'REQUIRES REVIEW',
+    require_senior_review: 'REQUIRES SENIOR REVIEW',
+    block: 'BLOCKED'
   };
 
   console.log('┌─────────────────────────────────────────────────────────────┐');
   console.log('│  FINAL DECISION                                               │');
   console.log('├─────────────────────────────────────────────────────────────┤');
-  console.log(`│  ${actionEmoji[decision.action]} ${actionText[decision.action]}`.padEnd(60) + '│');
+  console.log(
+    `│  ${actionEmoji[decision.action] || ''} ${actionText[decision.action] || ''}`.padEnd(60) + '│'
+  );
   console.log(`│  Confidence: ${(decision.confidence * 100).toFixed(1)}%`.padEnd(60) + '│');
   console.log('│                                                               │');
-  console.log(`│  ${decision.reasoning.substring(0, 56)}`.padEnd(60) + '│');
+  console.log(`│  ${decision.reasoning.summary.substring(0, 56)}`.padEnd(60) + '│');
   console.log('└─────────────────────────────────────────────────────────────┘');
   console.log();
 

@@ -1,28 +1,29 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { Config } from '../types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export async function loadConfig(configPath) {
+export async function loadConfig(configPath?: string): Promise<Config> {
   const defaultConfigPath = path.join(__dirname, '../../config.json');
   const configFilePath = configPath || defaultConfigPath;
 
   try {
     const configContent = await fs.readFile(configFilePath, 'utf-8');
-    const config = JSON.parse(configContent);
+    const config = JSON.parse(configContent) as Partial<Config>;
     return validateConfig(config);
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
       throw new Error(
         `Config file not found at ${configFilePath}. Copy config.example.json to config.json and configure.`
       );
     }
-    throw new Error(`Failed to load config: ${error.message}`);
+    throw new Error(`Failed to load config: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function validateConfig(config) {
+function validateConfig(config: Partial<Config>): Config {
   if (!config.github || !config.github.token) {
     throw new Error('Missing required config: github.token');
   }
@@ -30,6 +31,7 @@ function validateConfig(config) {
   // Set defaults
   return {
     ...config,
+    github: config.github!,
     team: {
       thresholds: {
         autoApprove: 20,
@@ -40,19 +42,22 @@ function validateConfig(config) {
       },
       criticalPaths: config.team?.criticalPaths || {},
       safePaths: config.team?.safePaths || {},
-      blockedPaths: config.team?.blockedPaths || []
+      blockedPaths: config.team?.blockedPaths || [],
+      teamId: config.team?.teamId || 'default'
     },
     security: {
       enabled: true,
       scanSecrets: true,
       scanDependencies: true,
       scanInjections: true,
-      dependencySeverityThreshold: 'moderate',
+      dependencySeverityThreshold: (config.security?.dependencySeverityThreshold || 'moderate') as any,
       ...config.security
     },
     policies: {
       enabled: true,
       frameworks: [],
+      requireJiraTicket: false,
+      requireChangelog: false,
       ...config.policies
     },
     decision: {

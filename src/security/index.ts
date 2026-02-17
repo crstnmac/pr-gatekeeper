@@ -1,12 +1,30 @@
+import type { SecurityConfig, PullRequest, SecurityFinding } from '../types.js';
+
+interface SecretPattern {
+  regex: RegExp;
+  confidence: 'high' | 'medium' | 'low';
+  description: string;
+}
+
+interface InjectionPattern {
+  regex: RegExp;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  description: string;
+}
+
 export class SecurityScanner {
-  constructor(config) {
+  private config: SecurityConfig;
+  private secretPatterns: Record<string, SecretPattern>;
+  private injectionPatterns: Record<string, InjectionPattern>;
+
+  constructor(config: SecurityConfig) {
     this.config = config;
     this.secretPatterns = this.initSecretPatterns();
     this.injectionPatterns = this.initInjectionPatterns();
   }
 
-  async scan(pr) {
-    const findings = [];
+  async scan(pr: PullRequest): Promise<SecurityFinding[]> {
+    const findings: SecurityFinding[] = [];
 
     if (this.config.enabled) {
       if (this.config.scanSecrets) {
@@ -28,8 +46,8 @@ export class SecurityScanner {
     return findings;
   }
 
-  scanSecrets(pr) {
-    const findings = [];
+  private scanSecrets(pr: PullRequest): SecurityFinding[] {
+    const findings: SecurityFinding[] = [];
 
     for (const file of pr.files) {
       if (!file.patch) continue;
@@ -45,7 +63,7 @@ export class SecurityScanner {
         for (const [patternName, pattern] of Object.entries(this.secretPatterns)) {
           const match = content.match(pattern.regex);
           if (match) {
-            const severity = pattern.confidence === 'high' ? 'critical' : 'high';
+            const severity: 'critical' | 'high' = pattern.confidence === 'high' ? 'critical' : 'high';
             findings.push({
               type: 'secret',
               pattern: patternName,
@@ -63,8 +81,8 @@ export class SecurityScanner {
     return findings;
   }
 
-  scanInjections(pr) {
-    const findings = [];
+  private scanInjections(pr: PullRequest): SecurityFinding[] {
+    const findings: SecurityFinding[] = [];
 
     for (const file of pr.files) {
       if (!file.patch || !file.filename.endsWith('.js') && !file.filename.endsWith('.ts')) {
@@ -98,14 +116,18 @@ export class SecurityScanner {
     return findings;
   }
 
-  async scanDependencies(pr) {
-    const findings = [];
+  private async scanDependencies(pr: PullRequest): Promise<SecurityFinding[]> {
+    const findings: SecurityFinding[] = [];
 
     // For MVP, just detect dependency file changes
     // In production, integrate with Snyk, npm audit, etc.
-    const depFiles = pr.files.filter(f =>
-      f.filename.includes('package.json') ||
-      f.filename.includes('package-lock.json')
+    const depFiles = pr.files.filter(
+      f =>
+        f.filename.includes('package.json') ||
+        f.filename.includes('package-lock.json') ||
+        f.filename.includes('requirements.txt') ||
+        f.filename.includes('pom.xml') ||
+        f.filename.includes('build.gradle')
     );
 
     for (const file of depFiles) {
@@ -122,7 +144,7 @@ export class SecurityScanner {
     return findings;
   }
 
-  initSecretPatterns() {
+  private initSecretPatterns(): Record<string, SecretPattern> {
     return {
       awsAccessKey: {
         regex: /AKIA[0-9A-Z]{16}/,
@@ -157,7 +179,7 @@ export class SecurityScanner {
     };
   }
 
-  initInjectionPatterns() {
+  private initInjectionPatterns(): Record<string, InjectionPattern> {
     return {
       sqlInjection: {
         regex: /(?:execute|exec|query)\s*\(\s*['"`][\s\S]*?\$\{[\s\S]*?\}/i,
@@ -182,7 +204,7 @@ export class SecurityScanner {
     };
   }
 
-  maskValue(value) {
+  private maskValue(value: string): string {
     if (!value || value.length < 8) return value;
     return value.substring(0, 4) + '****' + value.substring(value.length - 4);
   }

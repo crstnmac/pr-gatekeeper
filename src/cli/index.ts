@@ -1,15 +1,18 @@
-export function parseArgs() {
+import type { CLIArgs } from '../types.js';
+
+export function parseArgs(): CLIArgs {
   const args = process.argv.slice(2);
 
-  const parsed = {
-    owner: null,
-    repo: null,
-    pr: null,
-    config: null,
+  const parsed: Partial<CLIArgs> = {
+    owner: undefined,
+    repo: undefined,
+    pr: undefined,
+    config: undefined,
     verbose: false
   };
 
-  for (let i = 0; i < args.length; i++) {
+  let i = 0;
+  while (i < args.length) {
     const arg = args[i];
 
     switch (arg) {
@@ -40,6 +43,7 @@ export function parseArgs() {
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
+    i++;
   }
 
   // Validate required arguments
@@ -49,10 +53,10 @@ export function parseArgs() {
     process.exit(1);
   }
 
-  return parsed;
+  return parsed as CLIArgs;
 }
 
-function printHelp() {
+function printHelp(): void {
   console.log(`
 PR Gatekeeper - Intelligent PR Triage
 

@@ -1,13 +1,35 @@
 import { randomUUID } from 'crypto';
+import type {
+  DecisionConfig,
+  TeamConfig,
+  BlastRadiusResult,
+  SecurityFinding,
+  PolicyResult,
+  Decision,
+  DecisionFactor,
+  DecisionAction,
+  TeamThresholds
+} from '../types.js';
 
 export class DecisionEngine {
-  constructor(decisionConfig, teamConfig) {
+  private decisionConfig: DecisionConfig;
+  private teamConfig: TeamConfig;
+
+  constructor(decisionConfig: DecisionConfig, teamConfig: TeamConfig) {
     this.decisionConfig = decisionConfig;
     this.teamConfig = teamConfig;
   }
 
-  async make({ pr, blastRadius, securityFindings, policyResults }) {
-    const factors = [];
+  async make({
+    blastRadius,
+    securityFindings,
+    policyResults
+  }: {
+    blastRadius: BlastRadiusResult;
+    securityFindings: SecurityFinding[];
+    policyResults: PolicyResult[];
+  }): Promise<Decision> {
+    const factors: DecisionFactor[] = [];
     let confidence = 0;
 
     // Factor 1: Security findings (highest weight)
@@ -34,18 +56,14 @@ export class DecisionEngine {
     }
 
     // Generate recommendations
-    const recommendations = this.generateRecommendations(
-      action,
-      securityFindings,
-      policyResults
-    );
+    const recommendations = this.generateRecommendations(action, securityFindings, policyResults);
 
     return {
       decisionId: randomUUID(),
       action,
       confidence: Math.min(1, Math.max(0, confidence)),
       reasoning: {
-        summary: this.buildSummary(action, factors),
+        summary: this.buildSummary(action),
         factors
       },
       recommendations,
@@ -53,7 +71,7 @@ export class DecisionEngine {
     };
   }
 
-  evaluateSecurity(findings) {
+  private evaluateSecurity(findings: SecurityFinding[]): DecisionFactor {
     if (findings.length === 0) {
       return {
         factor: 'security_findings',
@@ -92,7 +110,7 @@ export class DecisionEngine {
     };
   }
 
-  evaluateBlastRadius(blastRadius) {
+  private evaluateBlastRadius(blastRadius: BlastRadiusResult): DecisionFactor {
     const score = blastRadius.score;
 
     if (score <= 20) {
@@ -133,7 +151,7 @@ export class DecisionEngine {
     }
   }
 
-  evaluatePolicies(results) {
+  private evaluatePolicies(results: PolicyResult[]): DecisionFactor {
     const passed = results.filter(r => r.status === 'passed').length;
     const failed = results.filter(r => r.status === 'failed').length;
     const warning = results.filter(r => r.status === 'warning').length;
@@ -176,8 +194,12 @@ export class DecisionEngine {
     };
   }
 
-  determineAction(blastRadius, securityFindings, policyResults) {
-    const thresholds = this.teamConfig.thresholds;
+  private determineAction(
+    blastRadius: BlastRadiusResult,
+    securityFindings: SecurityFinding[],
+    policyResults: PolicyResult[]
+  ): DecisionAction {
+    const thresholds = this.teamConfig.thresholds as TeamThresholds;
 
     // Check for critical security issues - always block
     const criticalSec = securityFindings.filter(f => f.severity === 'critical').length;
@@ -207,20 +229,24 @@ export class DecisionEngine {
     }
   }
 
-  buildSummary(action, factors) {
-    const actionText = {
-      'auto_approve': 'Safe change - auto-approved',
-      'auto_approve_comment': 'Safe change - auto-approved with comment',
-      'require_review': 'Requires human review',
-      'require_senior_review': 'Requires senior review',
-      'block': 'Change blocked - review required'
+  private buildSummary(action: DecisionAction): string {
+    const actionText: Record<DecisionAction, string> = {
+      auto_approve: 'Safe change - auto-approved',
+      auto_approve_comment: 'Safe change - auto-approved with comment',
+      require_review: 'Requires human review',
+      require_senior_review: 'Requires senior review',
+      block: 'Change blocked - review required'
     };
 
     return actionText[action];
   }
 
-  generateRecommendations(action, securityFindings, policyResults) {
-    const recommendations = [];
+  private generateRecommendations(
+    action: DecisionAction,
+    securityFindings: SecurityFinding[],
+    policyResults: PolicyResult[]
+  ): string[] {
+    const recommendations: string[] = [];
 
     if (securityFindings.length > 0) {
       recommendations.push('Review and fix security findings before merging');
@@ -249,8 +275,8 @@ export class DecisionEngine {
     return recommendations;
   }
 
-  generateNextSteps(action, securityFindings) {
-    const steps = [];
+  private generateNextSteps(action: DecisionAction, securityFindings: SecurityFinding[]): string[] {
+    const steps: string[] = [];
 
     if (securityFindings.length > 0) {
       const critical = securityFindings.filter(f => f.severity === 'critical');

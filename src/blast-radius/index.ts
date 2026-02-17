@@ -1,9 +1,22 @@
+import type {
+  TeamConfig,
+  PullRequest,
+  BlastRadiusResult,
+  CodeImpactDetails,
+  TestImpactDetails,
+  DependencyImpactDetails,
+  BlastImpactLevel,
+  RiskSignal
+} from '../types.js';
+
 export class BlastRadiusCalculator {
-  constructor(teamConfig) {
+  private config: TeamConfig;
+
+  constructor(teamConfig: TeamConfig) {
     this.config = teamConfig;
   }
 
-  async calculate(pr) {
+  async calculate(pr: PullRequest): Promise<BlastRadiusResult> {
     const codeImpact = this.calculateCodeImpact(pr);
     const testImpact = await this.calculateTestImpact(pr);
     const dependencyImpact = this.calculateDependencyImpact(pr);
@@ -34,7 +47,7 @@ export class BlastRadiusCalculator {
     };
   }
 
-  calculateCodeImpact(pr) {
+  private calculateCodeImpact(pr: PullRequest): CodeImpactDetails {
     const fileCount = pr.files.length;
     const lineCount = pr.additions + pr.deletions;
     const criticalPathImpact = this.calculateCriticalPathImpact(pr.files);
@@ -61,7 +74,7 @@ export class BlastRadiusCalculator {
     score = Math.max(0, score - safePathReduction);
 
     // Determine level
-    let level = 'low';
+    let level: BlastImpactLevel = 'low';
     if (score > 10) level = 'medium';
     if (score > 20) level = 'high';
     if (score > 30) level = 'critical';
@@ -76,7 +89,7 @@ export class BlastRadiusCalculator {
     };
   }
 
-  calculateCriticalPathImpact(files) {
+  private calculateCriticalPathImpact(files: PullRequest['files']): number {
     let impact = 0;
 
     for (const file of files) {
@@ -92,7 +105,7 @@ export class BlastRadiusCalculator {
     return Math.min(10, impact);
   }
 
-  calculateSafePathReduction(files) {
+  private calculateSafePathReduction(files: PullRequest['files']): number {
     let reduction = 0;
 
     for (const file of files) {
@@ -106,8 +119,8 @@ export class BlastRadiusCalculator {
     return Math.min(10, Math.round(reduction));
   }
 
-  detectRiskSignals(pr) {
-    const signals = [];
+  private detectRiskSignals(pr: PullRequest): RiskSignal[] {
+    const signals: RiskSignal[] = [];
 
     // Check for blocked paths
     for (const blockedPath of this.config.blockedPaths) {
@@ -152,13 +165,14 @@ export class BlastRadiusCalculator {
     return signals;
   }
 
-  async calculateTestImpact(pr) {
+  private async calculateTestImpact(pr: PullRequest): Promise<TestImpactDetails> {
     // For MVP, we'll use simple heuristics
     // In production, this would query test results from CI
-    const testFiles = pr.files.filter(f =>
-      f.filename.includes('test') ||
-      f.filename.includes('spec') ||
-      f.filename.includes('__tests__')
+    const testFiles = pr.files.filter(
+      f =>
+        f.filename.includes('test') ||
+        f.filename.includes('spec') ||
+        f.filename.includes('__tests__')
     );
 
     let score = 0;
@@ -173,7 +187,7 @@ export class BlastRadiusCalculator {
     const testAdditions = testFiles.reduce((sum, f) => sum + f.additions, 0);
     if (testAdditions > 0) score += Math.min(10, testAdditions / 50);
 
-    let level = 'low';
+    let level: BlastImpactLevel = 'low';
     if (score > 5) level = 'medium';
     if (score > 10) level = 'high';
 
@@ -185,14 +199,15 @@ export class BlastRadiusCalculator {
     };
   }
 
-  calculateDependencyImpact(pr) {
+  private calculateDependencyImpact(pr: PullRequest): DependencyImpactDetails {
     // For MVP, detect package files
-    const depFiles = pr.files.filter(f =>
-      f.filename.includes('package.json') ||
-      f.filename.includes('package-lock.json') ||
-      f.filename.includes('requirements.txt') ||
-      f.filename.includes('pom.xml') ||
-      f.filename.includes('build.gradle')
+    const depFiles = pr.files.filter(
+      f =>
+        f.filename.includes('package.json') ||
+        f.filename.includes('package-lock.json') ||
+        f.filename.includes('requirements.txt') ||
+        f.filename.includes('pom.xml') ||
+        f.filename.includes('build.gradle')
     );
 
     let score = 0;
@@ -210,7 +225,7 @@ export class BlastRadiusCalculator {
       }
     }
 
-    let level = 'low';
+    let level: BlastImpactLevel = 'low';
     if (score > 5) level = 'medium';
     if (score > 15) level = 'high';
 
@@ -221,7 +236,7 @@ export class BlastRadiusCalculator {
     };
   }
 
-  matchPattern(filename, pattern) {
+  private matchPattern(filename: string, pattern: string): boolean {
     // Simple glob matching for MVP
     const regexPattern = pattern
       .replace(/\*\*/g, '.*')

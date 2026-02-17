@@ -1,15 +1,54 @@
+import type {
+  PoliciesConfig,
+  PullRequest,
+  BlastRadiusResult,
+  SecurityFinding,
+  PolicyResult,
+  PolicyStatus,
+  PolicyValidation,
+  Severity
+} from '../types.js';
+
+interface PolicyRule {
+  ruleId: string;
+  name: string;
+  category: string;
+  conditions?: {
+    targetBranch?: string | string[];
+  };
+  validations: PolicyValidationConfig[];
+}
+
+interface PolicyValidationConfig {
+  type: string;
+  severity?: Severity;
+  maxScore?: number;
+  block?: boolean;
+  paths?: string[];
+  maxFiles?: number;
+}
+
 export class PolicyEvaluator {
-  constructor(config) {
+  private config: PoliciesConfig;
+  private rules: PolicyRule[];
+
+  constructor(config: PoliciesConfig) {
     this.config = config;
     this.rules = this.initRules();
   }
 
-  async evaluate(pr, context) {
+  async evaluate(
+    pr: PullRequest,
+    context: {
+      blastRadius: BlastRadiusResult;
+      securityFindings: SecurityFinding[];
+    }
+  ): Promise<PolicyResult[]> {
     if (!this.config.enabled) {
       return [];
     }
 
-    const results = [];
+    const results: PolicyResult[] = [];
 
     for (const rule of this.rules) {
       const result = await this.evaluateRule(rule, pr, context);
@@ -19,19 +58,28 @@ export class PolicyEvaluator {
     return results;
   }
 
-  async evaluateRule(rule, pr, context) {
+  private async evaluateRule(
+    rule: PolicyRule,
+    pr: PullRequest,
+    context: {
+      blastRadius: BlastRadiusResult;
+      securityFindings: SecurityFinding[];
+    }
+  ): Promise<PolicyResult> {
     // Check if rule applies
     if (!this.ruleApplies(rule, pr)) {
       return {
         ruleId: rule.ruleId,
         name: rule.name,
         status: 'skipped',
-        reason: 'Rule conditions not met'
+        reason: 'Rule conditions not met',
+        validations: [],
+        message: ''
       };
     }
 
     // Run validations
-    const validations = [];
+    const validations: PolicyValidation[] = [];
     for (const validation of rule.validations) {
       const result = await this.runValidation(validation, pr, context);
       validations.push(result);
@@ -41,7 +89,7 @@ export class PolicyEvaluator {
     const failed = validations.filter(v => v.status === 'failed');
     const blocked = failed.some(v => v.severity === 'block');
 
-    const status = blocked ? 'failed' : failed.length > 0 ? 'warning' : 'passed';
+    const status: PolicyStatus = blocked ? 'failed' : failed.length > 0 ? 'warning' : 'passed';
     const action = blocked ? 'block' : status === 'warning' ? 'warn' : null;
 
     return {
@@ -54,7 +102,7 @@ export class PolicyEvaluator {
     };
   }
 
-  ruleApplies(rule, pr) {
+  private ruleApplies(rule: PolicyRule, pr: PullRequest): boolean {
     if (!rule.conditions) return true;
 
     // Check target branch
@@ -70,7 +118,14 @@ export class PolicyEvaluator {
     return true;
   }
 
-  async runValidation(validation, pr, context) {
+  private async runValidation(
+    validation: PolicyValidationConfig,
+    pr: PullRequest,
+    context: {
+      blastRadius: BlastRadiusResult;
+      securityFindings: SecurityFinding[];
+    }
+  ): Promise<PolicyValidation> {
     switch (validation.type) {
       case 'blast_radius':
         return this.validateBlastRadius(validation, context.blastRadius);
@@ -89,7 +144,10 @@ export class PolicyEvaluator {
     }
   }
 
-  validateBlastRadius(validation, blastRadius) {
+  private validateBlastRadius(
+    validation: PolicyValidationConfig,
+    blastRadius: BlastRadiusResult
+  ): PolicyValidation {
     const threshold = validation.maxScore || 60;
 
     if (blastRadius.score > threshold) {
@@ -107,9 +165,12 @@ export class PolicyEvaluator {
     };
   }
 
-  validateSecurity(validation, findings) {
-    const severityThreshold = validation.severity || 'medium';
-    const severityOrder = ['low', 'medium', 'high', 'critical'];
+  private validateSecurity(
+    validation: PolicyValidationConfig,
+    findings: SecurityFinding[]
+  ): PolicyValidation {
+    const severityThreshold: Severity = validation.severity || 'medium';
+    const severityOrder: Severity[] = ['low', 'medium', 'high', 'critical'];
     const thresholdIndex = severityOrder.indexOf(severityThreshold);
 
     const severeFindings = findings.filter(f =>
@@ -131,7 +192,10 @@ export class PolicyEvaluator {
     };
   }
 
-  validateBlockedPath(validation, pr) {
+  private validateBlockedPath(
+    validation: PolicyValidationConfig,
+    pr: PullRequest
+  ): PolicyValidation {
     const blockedPaths = validation.paths || [];
 
     for (const file of pr.files) {
@@ -153,7 +217,10 @@ export class PolicyEvaluator {
     };
   }
 
-  validateFileCount(validation, pr) {
+  private validateFileCount(
+    validation: PolicyValidationConfig,
+    pr: PullRequest
+  ): PolicyValidation {
     const maxFiles = validation.maxFiles || 50;
 
     if (pr.files.length > maxFiles) {
@@ -171,7 +238,7 @@ export class PolicyEvaluator {
     };
   }
 
-  buildRuleMessage(rule, status) {
+  private buildRuleMessage(rule: PolicyRule, status: PolicyStatus): string {
     if (status === 'passed') {
       return `✅ ${rule.name}: passed`;
     } else if (status === 'warning') {
@@ -181,8 +248,8 @@ export class PolicyEvaluator {
     }
   }
 
-  initRules() {
-    const rules = [];
+  private initRules(): PolicyRule[] {
+    const rules: PolicyRule[] = [];
 
     // SOC 2: No Secrets
     if (this.config.frameworks.includes('SOC2')) {
@@ -236,7 +303,7 @@ export class PolicyEvaluator {
     return rules;
   }
 
-  matchPattern(filename, pattern) {
+  private matchPattern(filename: string, pattern: string): boolean {
     const regexPattern = pattern
       .replace(/\*\*/g, '.*')
       .replace(/\*/g, '[^/]*')

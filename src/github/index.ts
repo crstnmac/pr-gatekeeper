@@ -1,14 +1,17 @@
 import { Octokit } from 'octokit';
+import type { GitHubConfig, PullRequest } from '../types.js';
 
 export class GitHubClient {
-  constructor(config) {
+  private octokit: Octokit;
+
+  constructor(config: GitHubConfig) {
     this.octokit = new Octokit({
       auth: config.token,
       baseUrl: config.baseUrl || 'https://api.github.com'
     });
   }
 
-  async getPR(owner, repo, prNumber) {
+  async getPR(owner: string, repo: string, prNumber: number): Promise<PullRequest> {
     try {
       const { data: pr } = await this.octokit.rest.pulls.get({
         owner,
@@ -34,7 +37,7 @@ export class GitHubClient {
         url: pr.html_url,
         files: files.map(file => ({
           filename: file.filename,
-          status: file.status,
+          status: file.status as 'added' | 'modified' | 'removed' | 'renamed',
           additions: file.additions,
           deletions: file.deletions,
           changes: file.changes,
@@ -42,14 +45,20 @@ export class GitHubClient {
         }))
       };
     } catch (error) {
-      if (error.status === 404) {
+      if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
         throw new Error(`PR #${prNumber} not found in ${owner}/${repo}`);
       }
-      throw new Error(`Failed to fetch PR: ${error.message}`);
+      throw new Error(`Failed to fetch PR: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  async getApprovals(owner, repo, prNumber) {
+  async getApprovals(owner: string, repo: string, prNumber: number): Promise<
+    Array<{
+      user: string;
+      submittedAt: string;
+      id: number;
+    }>
+  > {
     try {
       const { data: reviews } = await this.octokit.rest.pulls.listReviews({
         owner,
@@ -60,17 +69,25 @@ export class GitHubClient {
       return reviews
         .filter(review => review.state === 'APPROVED')
         .map(review => ({
-          user: review.user.login,
-          submittedAt: review.submitted_at,
+          user: review.user!.login,
+          submittedAt: review.submitted_at || '',
           id: review.id
         }));
     } catch (error) {
-      console.error('Failed to fetch approvals:', error.message);
+      console.error('Failed to fetch approvals:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }
 
-  async getStatusChecks(owner, repo, prNumber) {
+  async getStatusChecks(owner: string, repo: string, prNumber: number): Promise<{
+    state: string;
+    totalCount: number;
+    statuses: Array<{
+      context: string;
+      state: string;
+      description: string | null;
+    }>;
+  }> {
     try {
       const { data: pr } = await this.octokit.rest.pulls.get({
         owner,
@@ -94,7 +111,10 @@ export class GitHubClient {
         }))
       };
     } catch (error) {
-      console.error('Failed to fetch status checks:', error.message);
+      console.error(
+        'Failed to fetch status checks:',
+        error instanceof Error ? error.message : String(error)
+      );
       return { state: 'unknown', totalCount: 0, statuses: [] };
     }
   }
