@@ -1,6 +1,6 @@
 # PR Gatekeeper - Prototype
 
-Intelligent PR triage for enterprise teams.
+Intelligent PR triage for enterprise teams. Built with TypeScript.
 
 ## What It Does
 
@@ -19,8 +19,14 @@ npm install
 cp config.example.json config.json
 # Edit config.json with your settings
 
-# Run
-npm start -- --owner <owner> --repo <repo> --pr <pr-number>
+# Run (development mode with tsx)
+npm run dev -- --owner <owner> --repo <repo> --pr <pr-number>
+
+# Build
+npm run build
+
+# Run (production mode)
+npm run start:build -- --owner <owner> --repo <repo> --pr <pr-number>
 ```
 
 ## Architecture
@@ -32,12 +38,24 @@ src/
 ├── policy/           # Policy engine
 ├── decision/         # Decision engine
 ├── github/           # GitHub API client
-└── index.js          # Main entry point
+├── audit/            # Audit logging
+├── types.ts          # Type definitions
+├── gatekeeper/       # Main orchestration
+└── index.ts          # Main entry point
 ```
 
 ## Development
 
 ```bash
+# Run in development mode (tsx)
+npm run dev -- [args]
+
+# Type checking
+npm run type-check
+
+# Build TypeScript
+npm run build
+
 # Run tests
 npm test
 
@@ -47,3 +65,11 @@ npm run lint
 # Format
 npm run format
 ```
+
+## TypeScript
+
+This project uses TypeScript with strict mode enabled:
+- Full type safety
+- Interface definitions for all data structures
+- Better IDE support
+- Catch errors at compile time
