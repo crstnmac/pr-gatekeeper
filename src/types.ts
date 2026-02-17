@@ -109,8 +109,9 @@ export interface SecurityFinding {
 }
 
 export type SecurityType = 'secret' | 'injection' | 'dependency';
-export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'warn' | 'block';
+export type Severity = 'critical' | 'high' | 'medium' | 'low';
 export type Confidence = 'high' | 'medium' | 'low';
+export type PolicyActionType = 'block' | 'warn' | null;
 
 /**
  * Policy evaluation result

@@ -6,7 +6,8 @@ import type {
   PolicyResult,
   PolicyStatus,
   PolicyValidation,
-  Severity
+  Severity,
+  PolicyActionType
 } from '../types.js';
 
 interface PolicyRule {
@@ -21,12 +22,14 @@ interface PolicyRule {
 
 interface PolicyValidationConfig {
   type: string;
-  severity?: Severity;
+  severity?: PolicyActionType;
   maxScore?: number;
   block?: boolean;
   paths?: string[];
   maxFiles?: number;
 }
+
+type PolicyActionType = 'block' | 'warn' | null;
 
 export class PolicyEvaluator {
   private config: PoliciesConfig;
@@ -90,7 +93,7 @@ export class PolicyEvaluator {
     const blocked = failed.some(v => v.severity === 'block');
 
     const status: PolicyStatus = blocked ? 'failed' : failed.length > 0 ? 'warning' : 'passed';
-    const action = blocked ? 'block' : status === 'warning' ? 'warn' : null;
+    const action: PolicyActionType = blocked ? 'block' : status === 'warning' ? 'warn' : null;
 
     return {
       ruleId: rule.ruleId,
@@ -161,7 +164,8 @@ export class PolicyEvaluator {
 
     return {
       type: 'blast_radius',
-      status: 'passed'
+      status: 'passed',
+      severity: undefined
     };
   }
 
@@ -181,14 +185,15 @@ export class PolicyEvaluator {
       return {
         type: 'security',
         status: 'failed',
-        severity: validation.block ? 'block' : 'warn',
+        severity: validation.block === true ? 'block' : 'warn',
         message: `Found ${severeFindings.length} ${severityThreshold}+ severity security issues`
       };
     }
 
     return {
       type: 'security',
-      status: 'passed'
+      status: 'passed',
+      severity: undefined
     };
   }
 
@@ -213,7 +218,8 @@ export class PolicyEvaluator {
 
     return {
       type: 'blocked_path',
-      status: 'passed'
+      status: 'passed',
+      severity: undefined
     };
   }
 
@@ -234,7 +240,8 @@ export class PolicyEvaluator {
 
     return {
       type: 'file_count',
-      status: 'passed'
+      status: 'passed',
+      severity: undefined
     };
   }
 

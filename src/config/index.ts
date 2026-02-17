@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Config } from '../types.js';
+import type { Config, Severity } from '../types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,7 +50,7 @@ function validateConfig(config: Partial<Config>): Config {
       scanSecrets: true,
       scanDependencies: true,
       scanInjections: true,
-      dependencySeverityThreshold: (config.security?.dependencySeverityThreshold || 'moderate') as any,
+      dependencySeverityThreshold: 'medium',
       ...config.security
     },
     policies: {
