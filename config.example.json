@@ -27,7 +27,7 @@
     "scanSecrets": true,
     "scanDependencies": true,
     "scanInjections": true,
-    "dependencySeverityThreshold": "moderate"
+    "dependencySeverityThreshold": "medium"
   },
   "policies": {
     "enabled": true,
