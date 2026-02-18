@@ -5,7 +5,7 @@ node_modules/
 config.json
 
 # Audit logs
-audit/
+audit-logs/
 
 # OS files
 .DS_Store

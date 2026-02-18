@@ -135,6 +135,7 @@ export type PolicyAction = 'block' | 'warn' | null;
 export interface PolicyValidation {
   type: string;
   status: PolicyStatus;
+  action?: PolicyAction;
   severity?: Severity;
   message?: string;
   reason?: string;

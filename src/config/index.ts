@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Config, Severity } from '../types.js';
+import type { Config } from '../types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,7 +66,7 @@ function validateConfig(config: Partial<Config>): Config {
       ...config.decision
     },
     audit: {
-      logPath: './audit',
+      logPath: './audit-logs',
       retentionDays: 90,
       ...config.audit
     }

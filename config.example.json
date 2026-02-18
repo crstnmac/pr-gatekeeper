@@ -40,7 +40,7 @@
     "fallbackToReview": true
   },
   "audit": {
-    "logPath": "./audit",
+    "logPath": "./audit-logs",
     "retentionDays": 90
   }
 }

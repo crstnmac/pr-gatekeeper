@@ -7,7 +7,7 @@ import type {
   PolicyStatus,
   PolicyValidation,
   Severity,
-  PolicyActionType
+  PolicyAction
 } from '../types.js';
 
 interface PolicyRule {
@@ -22,14 +22,12 @@ interface PolicyRule {
 
 interface PolicyValidationConfig {
   type: string;
-  severity?: PolicyActionType;
+  action?: PolicyAction;
   maxScore?: number;
   block?: boolean;
   paths?: string[];
   maxFiles?: number;
 }
-
-type PolicyActionType = 'block' | 'warn' | null;
 
 export class PolicyEvaluator {
   private config: PoliciesConfig;
@@ -90,10 +88,10 @@ export class PolicyEvaluator {
 
     // Determine overall result
     const failed = validations.filter(v => v.status === 'failed');
-    const blocked = failed.some(v => v.severity === 'block');
+    const blocked = failed.some(v => v.action === 'block');
 
     const status: PolicyStatus = blocked ? 'failed' : failed.length > 0 ? 'warning' : 'passed';
-    const action: PolicyActionType = blocked ? 'block' : status === 'warning' ? 'warn' : null;
+    const action: PolicyAction = blocked ? 'block' : status === 'warning' ? 'warn' : null;
 
     return {
       ruleId: rule.ruleId,
@@ -157,7 +155,7 @@ export class PolicyEvaluator {
       return {
         type: 'blast_radius',
         status: 'failed',
-        severity: validation.severity || 'warn',
+        action: validation.action || 'warn',
         message: `Blast radius score ${blastRadius.score} exceeds threshold ${threshold}`
       };
     }
@@ -165,7 +163,7 @@ export class PolicyEvaluator {
     return {
       type: 'blast_radius',
       status: 'passed',
-      severity: undefined
+      action: undefined
     };
   }
 
@@ -173,7 +171,7 @@ export class PolicyEvaluator {
     validation: PolicyValidationConfig,
     findings: SecurityFinding[]
   ): PolicyValidation {
-    const severityThreshold: Severity = validation.severity || 'medium';
+    const severityThreshold: Severity = validation.block === true ? 'critical' : 'medium';
     const severityOrder: Severity[] = ['low', 'medium', 'high', 'critical'];
     const thresholdIndex = severityOrder.indexOf(severityThreshold);
 
@@ -185,7 +183,7 @@ export class PolicyEvaluator {
       return {
         type: 'security',
         status: 'failed',
-        severity: validation.block === true ? 'block' : 'warn',
+        action: validation.block === true ? 'block' : 'warn',
         message: `Found ${severeFindings.length} ${severityThreshold}+ severity security issues`
       };
     }
@@ -193,7 +191,7 @@ export class PolicyEvaluator {
     return {
       type: 'security',
       status: 'passed',
-      severity: undefined
+      action: undefined
     };
   }
 
@@ -209,7 +207,7 @@ export class PolicyEvaluator {
           return {
             type: 'blocked_path',
             status: 'failed',
-            severity: 'block',
+            action: 'block',
             message: `File ${file.filename} matches blocked pattern ${pattern}`
           };
         }
@@ -219,7 +217,7 @@ export class PolicyEvaluator {
     return {
       type: 'blocked_path',
       status: 'passed',
-      severity: undefined
+      action: undefined
     };
   }
 
@@ -233,7 +231,7 @@ export class PolicyEvaluator {
       return {
         type: 'file_count',
         status: 'failed',
-        severity: 'warn',
+        action: 'warn',
         message: `${pr.files.length} files changed exceeds threshold ${maxFiles}`
       };
     }
@@ -241,7 +239,7 @@ export class PolicyEvaluator {
     return {
       type: 'file_count',
       status: 'passed',
-      severity: undefined
+      action: undefined
     };
   }
 
@@ -268,7 +266,6 @@ export class PolicyEvaluator {
         validations: [
           {
             type: 'security',
-            severity: 'critical',
             block: true
           }
         ]
@@ -286,7 +283,7 @@ export class PolicyEvaluator {
           {
             type: 'blast_radius',
             maxScore: 80,
-            severity: 'warn'
+            action: 'warn'
           }
         ]
       });
@@ -302,7 +299,7 @@ export class PolicyEvaluator {
         {
           type: 'file_count',
           maxFiles: 100,
-          severity: 'warn'
+          action: 'warn'
         }
       ]
     });
