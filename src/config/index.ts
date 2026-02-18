@@ -28,18 +28,37 @@ function validateConfig(config: Partial<Config>): Config {
     throw new Error('Missing required config: github.token');
   }
 
-  // Set defaults
+  // Set defaults and validate thresholds
+  const thresholds = {
+    autoApprove: 20,
+    autoApproveWithComment: 40,
+    requiresReview: 60,
+    requiresSeniorReview: 80,
+    ...config.team?.thresholds
+  };
+
+  // Validate threshold ordering
+  if (thresholds.autoApprove >= thresholds.autoApproveWithComment) {
+    throw new Error('Invalid thresholds: autoApprove must be less than autoApproveWithComment');
+  }
+  if (thresholds.autoApproveWithComment >= thresholds.requiresReview) {
+    throw new Error('Invalid thresholds: autoApproveWithComment must be less than requiresReview');
+  }
+  if (thresholds.requiresReview >= thresholds.requiresSeniorReview) {
+    throw new Error('Invalid thresholds: requiresReview must be less than requiresSeniorReview');
+  }
+
+  // Ensure thresholds are in valid range
+  const allThresholds = Object.values(thresholds);
+  if (allThresholds.some(t => t < 0 || t > 100)) {
+    throw new Error('Invalid thresholds: all values must be between 0 and 100');
+  }
+
   return {
     ...config,
     github: config.github!,
     team: {
-      thresholds: {
-        autoApprove: 20,
-        autoApproveWithComment: 40,
-        requiresReview: 60,
-        requiresSeniorReview: 80,
-        ...config.team?.thresholds
-      },
+      thresholds,
       criticalPaths: config.team?.criticalPaths || {},
       safePaths: config.team?.safePaths || {},
       blockedPaths: config.team?.blockedPaths || [],
