@@ -23,11 +23,15 @@ export class DecisionEngine {
   async make({
     blastRadius,
     securityFindings,
-    policyResults
+    policyResults,
+    approvals,
+    ciStatus
   }: {
     blastRadius: BlastRadiusResult;
     securityFindings: SecurityFinding[];
     policyResults: PolicyResult[];
+    approvals?: Array<{ user: string; submittedAt: string; id: number }>;
+    ciStatus?: { state: string; totalCount: number; statuses: Array<{ context: string; state: string; description: string | null }> };
   }): Promise<Decision> {
     const factors: DecisionFactor[] = [];
     let confidence = 0;
@@ -35,20 +39,34 @@ export class DecisionEngine {
     // Factor 1: Security findings (highest weight)
     const securityFactor = this.evaluateSecurity(securityFindings);
     factors.push(securityFactor);
-    confidence += securityFactor.score * 0.4;
+    confidence += securityFactor.score * 0.35;
 
     // Factor 2: Blast radius
     const blastFactor = this.evaluateBlastRadius(blastRadius);
     factors.push(blastFactor);
-    confidence += blastFactor.score * 0.3;
+    confidence += blastFactor.score * 0.25;
 
     // Factor 3: Policy violations
     const policyFactor = this.evaluatePolicies(policyResults);
     factors.push(policyFactor);
-    confidence += policyFactor.score * 0.3;
+    confidence += policyFactor.score * 0.25;
+
+    // Factor 4: Approvals (if available)
+    if (approvals) {
+      const approvalFactor = this.evaluateApprovals(approvals);
+      factors.push(approvalFactor);
+      confidence += approvalFactor.score * 0.1;
+    }
+
+    // Factor 5: CI status (if available)
+    if (ciStatus) {
+      const ciFactor = this.evaluateCIStatus(ciStatus);
+      factors.push(ciFactor);
+      confidence += ciFactor.score * 0.05;
+    }
 
     // Determine action
-    let action = this.determineAction(blastRadius, securityFindings, policyResults);
+    let action = this.determineAction(blastRadius, securityFindings, policyResults, ciStatus);
 
     // Check confidence threshold
     if (confidence < this.decisionConfig.minConfidence) {
@@ -56,7 +74,7 @@ export class DecisionEngine {
     }
 
     // Generate recommendations
-    const recommendations = this.generateRecommendations(action, securityFindings, policyResults);
+    const recommendations = this.generateRecommendations(action, securityFindings, policyResults, ciStatus);
 
     return {
       decisionId: randomUUID(),
@@ -67,7 +85,7 @@ export class DecisionEngine {
         factors
       },
       recommendations,
-      nextSteps: this.generateNextSteps(action, securityFindings)
+      nextSteps: this.generateNextSteps(action, securityFindings, ciStatus)
     };
   }
 
@@ -188,16 +206,85 @@ export class DecisionEngine {
 
     return {
       factor: 'policy_compliance',
-      impact: 'none',
-      score: 1.0,
-      details: `All ${total} policies passed (${(passRate * 100).toFixed(0)}%)`
+        impact: 'none',
+        score: 1.0,
+        details: `All ${total} policies passed (${(passRate * 100).toFixed(0)}%)`
+      };
+  }
+
+  private evaluateApprovals(approvals: Array<{ user: string; submittedAt: string; id: number }>): DecisionFactor {
+    const count = approvals.length;
+
+    if (count === 0) {
+      return {
+        factor: 'approvals',
+        impact: 'none',
+        score: 0.5,
+        details: 'No approvals yet'
+      };
+    }
+
+    if (count >= 2) {
+      return {
+        factor: 'approvals',
+        impact: 'none',
+        score: 1.0,
+        details: `${count} approval(s) from team members`
+      };
+    }
+
+    return {
+      factor: 'approvals',
+      impact: 'low',
+      score: 0.7,
+      details: `${count} approval(s)`
+    };
+  }
+
+  private evaluateCIStatus(ciStatus: { state: string; totalCount: number; statuses: Array<{ context: string; state: string }> }): DecisionFactor {
+    const state = ciStatus.state.toLowerCase();
+
+    if (state === 'success') {
+      return {
+        factor: 'ci_status',
+        impact: 'none',
+        score: 1.0,
+        details: 'All CI checks passed'
+      };
+    }
+
+    if (state === 'pending') {
+      return {
+        factor: 'ci_status',
+        impact: 'medium',
+        score: 0.5,
+        details: 'CI checks in progress'
+      };
+    }
+
+    if (state === 'failure') {
+      const failedCount = ciStatus.statuses.filter(s => s.state === 'failure' || s.state === 'error').length;
+      return {
+        factor: 'ci_status',
+        impact: 'high',
+        score: 0.0,
+        details: `${failedCount} CI check(s) failed`
+      };
+    }
+
+    return {
+      factor: 'ci_status',
+      impact: 'low',
+      score: 0.6,
+      details: `CI status: ${state}`
     };
   }
 
   private determineAction(
     blastRadius: BlastRadiusResult,
     securityFindings: SecurityFinding[],
-    policyResults: PolicyResult[]
+    policyResults: PolicyResult[],
+    ciStatus?: { state: string; totalCount: number; statuses: Array<{ context: string; state: string }> }
   ): DecisionAction {
     const thresholds = this.teamConfig.thresholds as TeamThresholds;
 
@@ -210,6 +297,11 @@ export class DecisionEngine {
     // Check for blocked policies
     const blockedPolicies = policyResults.filter(r => r.action === 'block').length;
     if (blockedPolicies > 0) {
+      return 'block';
+    }
+
+    // Check CI status - block if failed
+    if (ciStatus && (ciStatus.state === 'failure' || ciStatus.state === 'error')) {
       return 'block';
     }
 
@@ -244,7 +336,8 @@ export class DecisionEngine {
   private generateRecommendations(
     action: DecisionAction,
     securityFindings: SecurityFinding[],
-    policyResults: PolicyResult[]
+    policyResults: PolicyResult[],
+    ciStatus?: { state: string; totalCount: number; statuses: Array<{ context: string; state: string }> }
   ): string[] {
     const recommendations: string[] = [];
 
@@ -254,6 +347,14 @@ export class DecisionEngine {
 
     if (policyResults.some(r => r.status === 'failed')) {
       recommendations.push('Address policy violations before merging');
+    }
+
+    if (ciStatus && ciStatus.state === 'failure') {
+      recommendations.push('Fix failing CI checks before merging');
+    }
+
+    if (ciStatus && ciStatus.state === 'pending') {
+      recommendations.push('Wait for CI checks to complete');
     }
 
     if (action === 'auto_approve') {
@@ -275,7 +376,7 @@ export class DecisionEngine {
     return recommendations;
   }
 
-  private generateNextSteps(action: DecisionAction, securityFindings: SecurityFinding[]): string[] {
+  private generateNextSteps(action: DecisionAction, securityFindings: SecurityFinding[], ciStatus?: { state: string }): string[] {
     const steps: string[] = [];
 
     if (securityFindings.length > 0) {
@@ -283,6 +384,14 @@ export class DecisionEngine {
       if (critical.length > 0) {
         steps.push('Immediately fix critical security vulnerabilities');
       }
+    }
+
+    if (ciStatus && ciStatus.state === 'failure') {
+      steps.push('Fix failing CI checks');
+    }
+
+    if (ciStatus && ciStatus.state === 'pending') {
+      steps.push('Wait for CI checks to complete');
     }
 
     if (action === 'block') {

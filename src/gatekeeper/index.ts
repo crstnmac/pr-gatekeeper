@@ -43,15 +43,23 @@ export class PRGatekeeper {
       securityFindings
     });
 
-    // 5. Make decision
+    // 5. Fetch approvals and CI status (parallel)
+    console.log('👥 Fetching approvals...');
+    const approvals = await this.github.getApprovals(owner, repo, prNumber);
+    console.log('🔄 Fetching CI status...');
+    const ciStatus = await this.github.getStatusChecks(owner, repo, prNumber);
+
+    // 6. Make decision
     console.log('🤖 Making decision...');
     const decision = await this.decision.make({
       blastRadius,
       securityFindings,
-      policyResults
+      policyResults,
+      approvals,
+      ciStatus
     });
 
-    // 6. Log to audit
+    // 7. Log to audit
     console.log('📝 Logging to audit...');
     await this.audit.log({
       pr,
