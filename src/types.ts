@@ -8,6 +8,7 @@
 export interface PullRequest {
   number: number;
   title: string;
+  body?: string;
   author: string;
   sourceBranch: string;
   targetBranch: string;

@@ -136,6 +136,10 @@ export class PolicyEvaluator {
         return this.validateBlockedPath(validation, pr);
       case 'file_count':
         return this.validateFileCount(validation, pr);
+      case 'jira_ticket':
+        return this.validateJiraTicket(validation, pr);
+      case 'changelog':
+        return this.validateChangelog(validation, pr);
       default:
         return {
           type: validation.type,
@@ -243,6 +247,66 @@ export class PolicyEvaluator {
     };
   }
 
+  private validateJiraTicket(validation: PolicyValidationConfig, pr: PullRequest): PolicyValidation {
+    // Check if PR body contains Jira ticket reference
+    const body = (pr.body || '').toLowerCase();
+
+    // Jira ticket patterns: PROJ-123, [PROJ-123], (PROJ-123)
+    const jiraPatterns = [
+      /\b[a-z]+-\d+\b/i,           // PROJ-123
+      /\[[a-z]+-\d+\]/i,        // [PROJ-123]
+      /\([a-z]+-\d+\)/i         // (PROJ-123)
+    ];
+
+    const hasTicket = jiraPatterns.some(pattern => pattern.test(body));
+
+    if (!hasTicket) {
+      return {
+        type: 'jira_ticket',
+        status: 'failed',
+        action: validation.action || 'block',
+        message: 'PR description must include a Jira ticket reference (e.g., PROJ-123)'
+      };
+    }
+
+    return {
+      type: 'jira_ticket',
+      status: 'passed',
+      action: undefined
+    };
+  }
+
+  private validateChangelog(validation: PolicyValidationConfig, pr: PullRequest): PolicyValidation {
+    const body = pr.body || '';
+
+    // Look for changelog indicators
+    const changelogIndicators = [
+      /##\s*changelog/i,
+      /###\s*changelog/i,
+      /changelog:\s*/i,
+      /changes:\s*/i,
+      /what's new:/i,
+      /what changed:/i
+    ];
+
+    const hasChangelog = changelogIndicators.some(pattern => pattern.test(body));
+
+    if (!hasChangelog) {
+      return {
+        type: 'changelog',
+        status: 'failed',
+        action: validation.action || 'block',
+        message: 'PR description must include a changelog section'
+      };
+    }
+
+    return {
+      type: 'changelog',
+      status: 'passed',
+      action: undefined
+    };
+  }
+
   private buildRuleMessage(rule: PolicyRule, status: PolicyStatus): string {
     if (status === 'passed') {
       return `✅ ${rule.name}: passed`;
@@ -303,6 +367,38 @@ export class PolicyEvaluator {
         }
       ]
     });
+
+    // Jira Ticket Requirement
+    if (this.config.requireJiraTicket) {
+      rules.push({
+        ruleId: 'jira-ticket-required',
+        name: 'Jira Ticket Required',
+        category: 'workflow',
+        conditions: { targetBranch: ['main', 'production', 'master'] },
+        validations: [
+          {
+            type: 'jira_ticket',
+            action: 'block'
+          }
+        ]
+      });
+    }
+
+    // Changelog Requirement
+    if (this.config.requireChangelog) {
+      rules.push({
+        ruleId: 'changelog-required',
+        name: 'Changelog Required',
+        category: 'documentation',
+        conditions: { targetBranch: ['main', 'production', 'master'] },
+        validations: [
+          {
+            type: 'changelog',
+            action: 'block'
+          }
+        ]
+      });
+    }
 
     return rules;
   }

@@ -28,6 +28,7 @@ export class GitHubClient {
       return {
         number: pr.number,
         title: pr.title,
+        body: pr.body || undefined,
         author: pr.user.login,
         sourceBranch: pr.head.ref,
         targetBranch: pr.base.ref,
